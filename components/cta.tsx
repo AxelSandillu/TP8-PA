@@ -2,9 +2,17 @@
 
 import { useState, useTransition } from 'react'
 import { recordConversion } from '@/app/practica/actions'
+import type { ConversionStatus } from '@/lib/experiment'
 
-export function Cta({ label }: { label: string }) {
-  const [tried, setTried] = useState(false)
+const MESSAGES: Record<ConversionStatus, string> = {
+  recorded: 'Conversión anotada. Queda una sola por visitante.',
+  duplicate: 'Este visitante ya tenía una conversión anotada. El segundo clic no suma.',
+  ignored: 'No se pudo anotar: falta la asignación del visitante.',
+  preview: 'Vista previa: el clic no escribe cookies ni suma una conversión.',
+}
+
+export function Cta({ label, preview = false }: { label: string; preview?: boolean }) {
+  const [status, setStatus] = useState<ConversionStatus | null>(null)
   const [pending, startTransition] = useTransition()
 
   return (
@@ -14,8 +22,8 @@ export function Cta({ label }: { label: string }) {
         disabled={pending}
         onClick={() => {
           startTransition(async () => {
-            await recordConversion()
-            setTried(true)
+            const result = await recordConversion({ from: 'cta', preview })
+            setStatus(result.status)
           })
         }}
         className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground disabled:opacity-50"
@@ -23,8 +31,8 @@ export function Cta({ label }: { label: string }) {
         {label}
       </button>
       <p className="max-w-md text-sm text-muted-foreground">
-        {tried
-          ? 'Pendiente: el clic llegó, pero no queda anotada ninguna conversión.'
+        {status
+          ? MESSAGES[status]
           : 'La conversión se anota solo acá. Cargar la página no cuenta.'}
       </p>
     </div>

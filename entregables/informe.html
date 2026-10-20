@@ -1,0 +1,149 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8" />
+    <title>Informe · Laboratorio 01</title>
+    <style>
+      @page {
+        size: A4;
+        margin: 13mm 17mm 11mm 17mm;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        color: #211d18;
+        background: #ffffff;
+        font-family: Georgia, 'Times New Roman', serif;
+        font-size: 9.9pt;
+        line-height: 1.33;
+      }
+
+      header {
+        border-bottom: 1.5px solid #211d18;
+        padding-bottom: 5px;
+        margin-bottom: 9px;
+      }
+
+      .kicker {
+        margin: 0 0 4px;
+        font-family: 'Helvetica Neue', Arial, sans-serif;
+        font-size: 7.5pt;
+        letter-spacing: 0.14em;
+        text-transform: uppercase;
+        color: #6b6257;
+      }
+
+      h1 {
+        margin: 0;
+        font-size: 18pt;
+        line-height: 1.05;
+        font-weight: 600;
+      }
+
+      h2 {
+        margin: 9px 0 3px;
+        font-size: 11pt;
+        line-height: 1.15;
+      }
+
+      p {
+        margin: 0 0 4px;
+        text-align: justify;
+      }
+
+      .hash {
+        margin-top: 9px;
+        border-top: 1px solid #c9c0b4;
+        padding-top: 7px;
+      }
+
+      .prueba {
+        margin: 4px 0;
+        padding: 5px 8px;
+        background: #f4efe6;
+        border-left: 3px solid #6f5130;
+        font-family: 'SFMono-Regular', Menlo, Consolas, monospace;
+        font-size: 9.3pt;
+      }
+
+      .nota {
+        color: #5f564b;
+        font-size: 9.6pt;
+      }
+    </style>
+  </head>
+  <body>
+    <header>
+      <p class="kicker">Programación Avanzada · Laboratorio 01 · Taller Norte</p>
+      <h1>Una landing, dos mensajes, una sola URL indexable</h1>
+    </header>
+
+    <h2>1. Qué ve una persona asignada a B</h2>
+    <p>
+      Una persona asignada a la variante B ve el titular <strong>“El curso empieza el 14 de abril. El
+      cupo, no.”</strong>, con el llamado a la acción <strong>“Reservar mi lugar”</strong>. En el HTML del
+      primer response recibe el title <strong>“Abril abre cupos: cursos de oficio en grupos de 12”</strong> y
+      la description <strong>“El 14 de abril empiezan grupos de doce. En la cohorte anterior, ocho de cada
+      diez consiguieron trabajo en el rubro antes de los noventa días.”</strong> Ambos metadatos están dentro
+      de los rangos pedidos (50 caracteres de title y 141 de description).
+    </p>
+    <p>
+      Lo que no cambia es la oferta: el inicio sigue siendo el 14 de abril, la duración es de 8 semanas, el
+      cupo es de 12 personas y los oficios son carpintería, electricidad y cocina. Tampoco cambia el canonical
+      ni el producto. B solo cambia el mensaje: en lugar de hablar del método, apura la decisión con la fecha
+      y el cupo.
+    </p>
+
+    <h2>2. Qué debería ver un crawler</h2>
+    <p>
+      Un crawler debería ver siempre la variante de control A, en la misma URL y con el mismo canonical. Los
+      rastreadores suelen no conservar cookies entre visitas; si cada request sin cookie sorteara una variante
+      distinta, el buscador podría indexar un title y una description inestables, y hasta alternar entre dos
+      textos sin saber cuál corresponde a la página.
+    </p>
+    <p>
+      Por eso los user agents de buscadores reciben el control como default estable, sin cookie de asignación
+      y sin que se les cuente una impresión. Esto no es cloaking: no se le muestra al buscador un contenido
+      distinto para manipular el ranking. Se le sirve la misma página, en la misma URL, con el mismo canonical,
+      y la variante de control funciona como versión canónica del mensaje. La persona sí puede ver A o B según
+      su asignación estable, pero ambas variantes son la misma oferta y la misma página indexable.
+    </p>
+
+    <h2>3. Por qué el canonical no cambia</h2>
+    <p>
+      El canonical es siempre <strong>/practica</strong>, sin query, porque A y B no son dos páginas: son dos
+      mensajes de la misma página. La variante vive en una cookie httpOnly, no en la dirección. Si se canonizara
+      <strong>?variant=b</strong>, o si se publicaran <strong>/variante-a</strong> y <strong>/variante-b</strong>,
+      el buscador vería dos o tres URLs con contenido casi idéntico y la indexación se repartiría entre
+      duplicados.
+    </p>
+    <p>
+      El preview es la excepción controlada: <strong>?preview=a</strong> y <strong>?preview=b</strong> existen
+      para inspeccionar las piezas, no para indexarlas. No escriben cookies, no cuentan como visita y llevan
+      <strong>noindex, nofollow</strong>. El canonical sigue apuntando a <strong>/practica</strong> limpio. Así
+      hay una sola URL indexable y el experimento no se parte.
+    </p>
+
+    <div class="hash">
+      <h2>Función de hash y prueba</h2>
+      <p>
+        La asignación usa <strong>FNV-1a de 32 bits sobre los bytes UTF-8</strong> del identificador del
+        visitante. La paridad del hash decide la variante: si el resultado es par, A; si es impar, B. Es una
+        función determinística, no un sorteo en cada render.
+      </p>
+      <div class="prueba">assignVariant('lab-visitor-demo-01') = B</div>
+      <p>
+        Repetir el mismo identificador devuelve siempre B. El visitante se genera una vez y se guarda en una
+        cookie de 30 días; recargar no cambia la variante.
+      </p>
+      <p class="nota">
+        El caso de prueba da 7,50% para A, 13,14% para B y una diferencia de 5,64 puntos porcentuales. Esa
+        diferencia es un dato descriptivo: no alcanza para declarar que B ganó.
+      </p>
+    </div>
+  </body>
+</html>

@@ -1,40 +1,79 @@
 import type { Metadata } from 'next'
+import { cookies } from 'next/headers'
 import Link from 'next/link'
 import { Landing } from '@/components/landing'
 import {
   CANONICAL_PATH,
+  COOKIE,
   DESCRIPTION_RANGE,
   TITLE_RANGE,
   VARIANTS,
   characterCount,
   inRange,
   isVariant,
+  resolveVariant,
   type Variant,
 } from '@/lib/experiment'
+
+export const dynamic = 'force-dynamic'
 
 type PracticaPageProps = {
   searchParams: Promise<{ preview?: string | string[] }>
 }
+
+type ResolvedVariant = {
+  preview: Variant | null
+  variant: Variant
+}
+
 function firstParam(value: string | string[] | undefined): string | undefined {
   return Array.isArray(value) ? value[0] : value
 }
 
-export async function generateMetadata(): Promise<Metadata> {
-  // TODO: title y description según la variante asignada.
-  // El canonical es CANONICAL_PATH, sin query.
-  // ?preview= lleva noindex y no es la asignación.
+async function resolvePageVariant(
+  searchParams: PracticaPageProps['searchParams'],
+): Promise<ResolvedVariant> {
+  const params = await searchParams
+  const requested = firstParam(params.preview)
+  const preview = isVariant(requested) ? requested : null
+  if (preview) return { preview, variant: preview }
+
+  const cookieStore = await cookies()
   return {
-    title: { absolute: 'Taller Norte' },
+    preview: null,
+    variant: resolveVariant(
+      cookieStore.get(COOKIE.visitor)?.value,
+      cookieStore.get(COOKIE.variant)?.value,
+    ),
+  }
+}
+
+export async function generateMetadata({
+  searchParams,
+}: PracticaPageProps): Promise<Metadata> {
+  const { preview, variant } = await resolvePageVariant(searchParams)
+  const copy = VARIANTS[variant]
+
+  return {
+    title: { absolute: copy.seoTitle },
+    description: copy.seoDescription,
     alternates: { canonical: CANONICAL_PATH },
-    robots: { index: false, follow: false },
+    robots: preview
+      ? { index: false, follow: false }
+      : { index: true, follow: true },
+    openGraph: {
+      title: copy.seoTitle,
+      description: copy.seoDescription,
+      url: CANONICAL_PATH,
+      siteName: 'Taller Norte',
+      locale: 'es_AR',
+      type: 'website',
+    },
   }
 }
 
 export default async function PracticaPage({ searchParams }: PracticaPageProps) {
-  const params = await searchParams
-  const requested = firstParam(params.preview)
-  const preview = isVariant(requested) ? requested : null
-  const variant: Variant = preview ?? 'a'
+  const { preview, variant } = await resolvePageVariant(searchParams)
   const copy = VARIANTS[variant]
   const titleLength = characterCount(copy.seoTitle)
   const descriptionLength = characterCount(copy.seoDescription)
@@ -42,14 +81,14 @@ export default async function PracticaPage({ searchParams }: PracticaPageProps) 
   return (
     <main id="contenido" className="mx-auto flex max-w-6xl flex-col gap-10 px-6 py-10 md:py-14">
       <p className="font-mono text-[0.7rem] tracking-[0.16em] text-muted-foreground uppercase">
-        Esqueleto · sin resolver
+        Taller Norte · variante {variant.toUpperCase()} · {copy.name}
       </p>
       <p className="border-b border-border pb-4 text-sm text-muted-foreground">
         {preview
-          ? `Estás viendo el copy ${preview.toUpperCase()} por query. No persiste, y esta vista todavía no lleva noindex.`
-          : 'Asignación pendiente. Sin cookie, la landing queda fija en el copy A.'}
+          ? `Estás viendo el copy ${preview.toUpperCase()} por query. Es una vista de inspección: no escribe cookies, no cuenta como visita y lleva noindex.`
+          : `La variante ${variant.toUpperCase()} quedó asignada por cookie. Recargar no la cambia y la URL canónica sigue siendo /practica.`}
       </p>
-      <Landing variant={variant} />
+      <Landing variant={variant} preview={preview !== null} />
       <div className="flex flex-wrap gap-2">
         <Link href="/practica?preview=a" className="rounded-md border border-border px-3 py-1.5 text-sm">
           Ver copy A
@@ -57,12 +96,19 @@ export default async function PracticaPage({ searchParams }: PracticaPageProps) 
         <Link href="/practica?preview=b" className="rounded-md border border-border px-3 py-1.5 text-sm">
           Ver copy B
         </Link>
+        <Link href="/practica" className="rounded-md border border-border px-3 py-1.5 text-sm">
+          Volver a mi variante
+        </Link>
         <Link href="/bitacora" className="rounded-md border border-border px-3 py-1.5 text-sm">
           Bitácora
         </Link>
       </div>
       <section className="flex flex-col gap-4">
-        <h2 className="font-serif text-2xl">Metadatos, todavía sin publicar</h2>
+        <h2 className="font-serif text-2xl">Metadatos publicados en el HTML</h2>
+        <p className="text-sm text-muted-foreground">
+          Canonical: <code className="font-mono">{CANONICAL_PATH}</code>, sin query. Vista previa: noindex,
+          nofollow.
+        </p>
         <dl className="grid gap-4 sm:grid-cols-2">
           <div className="flex flex-col gap-1 border-b border-border pb-3">
             <dt className="font-mono text-[0.7rem] tracking-[0.14em] text-muted-foreground uppercase">

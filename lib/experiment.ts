@@ -7,6 +7,8 @@ export type VariantStats = {
 
 export type ExperimentLog = Record<Variant, VariantStats>
 
+export type ConversionStatus = 'recorded' | 'duplicate' | 'ignored' | 'preview'
+
 export const COOKIE = {
   visitor: 'lab_visitor',
   variant: 'lab_variant',
@@ -64,6 +66,18 @@ export function isVariant(value: string | null | undefined): value is Variant {
   return value === 'a' || value === 'b'
 }
 
+export function isValidVisitorId(value: string | null | undefined): value is string {
+  return typeof value === 'string' && /^[A-Za-z0-9-]{8,64}$/.test(value)
+}
+
+export function resolveVariant(
+  visitor: string | null | undefined,
+  storedVariant: string | null | undefined,
+): Variant {
+  if (isValidVisitorId(visitor)) return assignVariant(visitor)
+  return isVariant(storedVariant) ? storedVariant : 'a'
+}
+
 export function emptyLog(): ExperimentLog {
   return {
     a: { impressions: 0, conversions: 0 },
@@ -71,14 +85,22 @@ export function emptyLog(): ExperimentLog {
   }
 }
 
-export function assignVariant(_visitorId: string): Variant {
-  // TODO: hash estable. El mismo id tiene que devolver siempre la misma variante.
-  return 'a'
+// FNV-1a de 32 bits sobre los bytes UTF-8 del identificador.
+// Es determinístico y no depende de la plataforma. La paridad del hash
+// reparte 50/50 y el mismo id cae siempre en la misma variante.
+export function assignVariant(visitorId: string): Variant {
+  const bytes = new TextEncoder().encode(visitorId)
+  let hash = 0x811c9dc5
+  for (const byte of bytes) {
+    hash ^= byte
+    hash = Math.imul(hash, 0x01000193) >>> 0
+  }
+  return hash % 2 === 0 ? 'a' : 'b'
 }
 
-export function conversionRate(_stats: VariantStats): number | null {
-  // TODO: conversiones / impresiones. Sin impresiones, devolver null, no 0.
-  return null
+export function conversionRate(stats: VariantStats): number | null {
+  if (!Number.isFinite(stats.impressions) || stats.impressions <= 0) return null
+  return stats.conversions / stats.impressions
 }
 
 export function rateGap(log: ExperimentLog): number | null {
@@ -88,9 +110,32 @@ export function rateGap(log: ExperimentLog): number | null {
   return (treatment - control) * 100
 }
 
-export function parseLog(_raw: string | undefined): ExperimentLog {
-  // TODO: validar el JSON antes de usarlo. Si falla, log vacío.
-  return emptyLog()
+function isCount(value: unknown): value is number {
+  return typeof value === 'number' && Number.isInteger(value) && value >= 0
+}
+
+export function parseLog(raw: string | undefined): ExperimentLog {
+  const log = emptyLog()
+  if (!raw) return log
+
+  try {
+    const parsed: unknown = JSON.parse(raw)
+    if (typeof parsed !== 'object' || parsed === null) return log
+    const record = parsed as Record<string, unknown>
+
+    for (const variant of ['a', 'b'] as const) {
+      const entry = record[variant]
+      if (typeof entry !== 'object' || entry === null) continue
+      const stats = entry as Record<string, unknown>
+      if (isCount(stats.impressions) && isCount(stats.conversions)) {
+        log[variant] = { impressions: stats.impressions, conversions: stats.conversions }
+      }
+    }
+  } catch {
+    return emptyLog()
+  }
+
+  return log
 }
 
 export function serializeLog(log: ExperimentLog): string {
