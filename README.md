@@ -168,20 +168,118 @@ La diferencia no demuestra que B sea mejor: es una diferencia, no una prueba de 
 | `components/landing.tsx` | Mensaje y oferta (la oferta es igual en A y B). |
 | `components/cta.tsx` | Botón que dispara la conversión y muestra el resultado. |
 
-## Verificación manual
+## Verificación manual paso a paso
 
-1. Abrir `/practica` y anotar la variante.
-2. Recargar: la variante no cambia.
-3. Borrar cookies y volver: puede tocar la otra variante (es otro visitante).
-4. Abrir `/practica?preview=b`: se ve B, con `noindex`, sin `Set-Cookie`.
-5. Volver a `/practica`: vuelve la variante asignada.
-6. Ver el código fuente de la página (no solo la pantalla): el `title` y la `description` son los de la variante; el canonical es `/practica`.
-7. Recargar dentro de 30 minutos: la tabla de `/bitacora` no suma otra impresión.
-8. Cargar la página y mirar la bitácora: no suma conversión.
-9. Hacer clic en el CTA: suma una conversión. Un segundo clic no suma otra.
-10. Abrir `/bitacora` sin sesión: el caso fijo sigue dando 7,50%, 13,14% y 5,64 pp.
-11. Buscar `localStorage` en el proyecto: no se usa para asignar ni para contar.
-12. Pedir `/practica` con user agent de Googlebot: recibe el control A, sin cookies y sin impresión.
+Usá una ventana incógnita y abrí DevTools (`F12`) → **Application → Cookies** y **Network**. El servidor de producción se levanta con `pnpm build` y `pnpm start`; también sirve `pnpm dev`.
+
+### 1. Asignación estable
+
+1. Abrí `/practica` y anotá la variante que muestra el título de la página (A o B).
+2. Recargá tres veces: siempre tiene que ser la misma variante.
+3. En Cookies deben aparecer:
+   - `lab_visitor`: UUID, `HttpOnly`, `Path=/`, unos 30 días.
+   - `lab_variant`: `a` o `b`, `HttpOnly`, `Path=/`, unos 30 días.
+   - `lab_impressed`: timestamp de la última impresión, unos 30 minutos.
+4. Borrá todas las cookies `lab_*` y recargá: puede tocar la otra variante, porque es otro visitante.
+
+### 2. Preview
+
+1. Abrí `/practica?preview=b`: se tiene que ver B.
+2. En **Network**, el request del documento no debe traer `Set-Cookie` y las cookies `lab_*` no deben cambiar.
+3. En el código fuente (`Cmd+U`) buscá `<meta name="robots" content="noindex, nofollow">`. En los headers de la respuesta tiene que estar `X-Robots-Tag: noindex, nofollow`.
+4. Sacá el `?preview=b` y volvé a `/practica`: tiene que volver la variante asignada, no B.
+
+### 3. Metadatos en el HTML
+
+Con `Cmd+U` (código fuente, no el inspector de Elements) verificá en el `<head>`:
+
+- `<title>` exacto de la variante, sin el sufijo `· Laboratorio 01`.
+- `<meta name="description">` de la variante.
+- `<link rel="canonical" href="/practica">`, sin query.
+- `<meta name="robots" content="index, follow">` en la landing normal.
+- En `?preview=b`: `noindex, nofollow`.
+
+También se puede ver por terminal:
+
+```bash
+curl -s http://localhost:3000/practica | grep -E '<title>|description|canonical|robots'
+curl -s 'http://localhost:3000/practica?preview=b' | grep -E '<title>|robots'
+```
+
+### 4. Impresiones
+
+1. Abrí `/bitacora` y anotá las impresiones de tu variante.
+2. Recargá `/practica` varias veces dentro de 30 minutos y volvé a `/bitacora`: no debe sumar.
+3. Para simular otra sesión sin esperar media hora, borrá solo la cookie `lab_impressed` y recargá `/practica`: ahí suma una impresión.
+4. Si borrás `lab_visitor`, `lab_variant` y `lab_impressed`, es otro visitante y puede sumar otra impresión.
+
+### 5. Conversión
+
+1. Abrí `/bitacora` y anotá las conversiones.
+2. Cargá `/practica` y volvé a la bitácora: no debe sumar.
+3. Hacé clic en el CTA (“Ver cupos de abril” o “Reservar mi lugar”) y recargá la bitácora: suma una.
+4. Hacé clic otra vez: no suma otra. La página avisa que ya había una conversión.
+5. En Cookies debería estar `lab_converted`.
+6. Para probar otra conversión, usá otra ventana incógnita o borrá todas las cookies `lab_*`: es otro visitante.
+
+### 6. Caso de prueba fijo
+
+Abrí `/bitacora` incluso sin cookies. La tabla “Caso de prueba fijo” tiene que mostrar siempre:
+
+- A: 240 impresiones, 18 conversiones, 7,50%.
+- B: 236 impresiones, 31 conversiones, 13,14%.
+- B − A: 5,64 pp.
+- `assignVariant('lab-visitor-demo-01') → B`.
+
+No debe declarar ganador.
+
+### 7. Base de datos
+
+Con el servidor corriendo:
+
+```bash
+sqlite3 .data/experiment.db "SELECT type, variant, COUNT(*) FROM events GROUP BY type, variant;"
+```
+
+Tienen que aparecer los eventos reales. Si reiniciás el servidor, los conteos siguen ahí, salvo que borres `.data`.
+
+### 8. localStorage
+
+En DevTools → **Application → Local Storage** no debe haber nada del experimento. En el código:
+
+```bash
+grep -r "localStorage" --exclude-dir=node_modules --exclude-dir=.next .
+```
+
+Solo debería aparecer en este README, no en la implementación.
+
+### 9. Crawler
+
+```bash
+curl -s -A 'Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)' \
+  -D - http://localhost:3000/practica | grep -E '<title>|set-cookie'
+```
+
+Tiene que devolver el title de A y ningún `Set-Cookie`. Además, no suma impresión en la bitácora.
+
+### 10. Build y tipos
+
+```bash
+npx pnpm exec tsc --noEmit
+npx pnpm build
+```
+
+### Reiniciar de cero
+
+Para dejar la base limpia antes de una corrección:
+
+```bash
+# Parar el servidor y después:
+rm -rf .data
+pnpm start
+```
+
+La base se vuelve a crear sola con el esquema.
 
 ## Notas de deploy
 
@@ -189,6 +287,12 @@ SQLite es ideal para la corrección local del TP. En un entorno serverless (por 
 
 No hay secretos en el repositorio. Las variables de entorno locales van en `.env` y están ignoradas por git.
 
-## Informe
+## Entregables
 
-El informe de una carilla está en [`INFORME.md`](./INFORME.md).
+- Proyecto: este repositorio.
+- URLs locales: `/practica` y `/bitacora` en `http://localhost:3000`.
+- Informe: [`INFORME.md`](./INFORME.md), [`entregables/INFORME.pdf`](./entregables/INFORME.pdf) y [`entregables/informe.html`](./entregables/informe.html).
+- Captura anotada del caso de prueba: [`entregables/captura-caso-prueba.png`](./entregables/captura-caso-prueba.png).
+- Índice de la entrega: [`entregables/README.md`](./entregables/README.md).
+
+La captura limpia y la captura completa de la bitácora también están en `entregables/`.

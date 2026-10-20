@@ -57,6 +57,11 @@ Responde las tres preguntas pedidas y cierra con FNV-1a y `assignVariant('lab-vi
 - `caso-prueba.png`: recorte limpio de la tabla.
 - `bitacora-completa.png`: captura completa de `/bitacora` como evidencia.
 
+## Verificación manual
+
+La guía paso a paso (cookies, preview, metadatos, impresiones, conversiones, caso fijo, SQLite,
+crawler y build) está en el `README.md` de la raíz, sección **“Verificación manual paso a paso”**.
+
 ## Base de datos
 
 El log se guarda en `.data/experiment.db` (ignorado por git). La tabla `events` registra
